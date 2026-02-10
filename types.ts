@@ -40,6 +40,9 @@ export interface Group {
 
 export interface UserState {
   role: UserRole;
-  name: string;
+  username: string;
+  name?: string;
+  phone?: string;
+  onboarded: boolean;
   groups: Group[];
 }
