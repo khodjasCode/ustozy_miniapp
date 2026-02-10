@@ -1,0 +1,8 @@
+{
+  "name": "Copy of Ustozy - Education Platform",
+  "description": "A collaborative platform for teachers and students within Telegram, featuring AI-generated interactive homework and progress tracking.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
