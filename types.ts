@@ -46,6 +46,7 @@ export interface UserState {
   name: string;
   phone: string;
   onboarded: boolean;
+  completedHomeworkIds?: string[];
 }
 
 export interface GlobalDB {
