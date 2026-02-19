@@ -1,21 +1,19 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 
-const API_KEY = process.env.API_KEY || "";
-
 export const generateHomework = async (topic: string, description: string) => {
-  if (!API_KEY) {
-    throw new Error("API Key not configured");
-  }
-
-  const ai = new GoogleGenAI({ apiKey: API_KEY });
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
-    contents: `Generate an interactive English homework for the topic: "${topic}". 
-    Description: "${description}". 
-    Return a list of 5 tasks in different formats: fill-blanks, word-order, matching, multiple-choice.
-    Keep the difficulty appropriate for the topic.`,
+    contents: `Generate 5 interactive English tasks for the topic: "${topic}". 
+    ${description ? `Context: ${description}` : ''}
+    
+    CRITICAL RULES:
+    1. For 'fill-blanks' type: The text MUST contain exactly one placeholder "[___]".
+    2. Every task MUST have 4 strings in the 'options' array.
+    3. The 'correctAnswer' MUST be exactly one of the strings from the 'options' array.
+    4. Make it fun and educational.`,
     config: {
       responseMimeType: "application/json",
       responseSchema: {
@@ -26,27 +24,22 @@ export const generateHomework = async (topic: string, description: string) => {
             id: { type: Type.STRING },
             type: { 
               type: Type.STRING,
-              description: "One of: fill-blanks, word-order, matching, multiple-choice"
+              description: "One of: fill-blanks, multiple-choice"
             },
-            question: { type: Type.STRING },
+            question: { type: Type.STRING, description: "Instruction for the student" },
             data: { 
               type: Type.OBJECT,
               properties: {
-                text: { type: Type.STRING, description: "For fill-blanks or word-order" },
-                options: { type: Type.ARRAY, items: { type: Type.STRING } },
-                pairs: { 
+                text: { type: Type.STRING, description: "Required for fill-blanks. Example: 'I want to eat [___] apple.'" },
+                options: { 
                   type: Type.ARRAY, 
-                  items: { 
-                    type: Type.OBJECT,
-                    properties: {
-                      left: { type: Type.STRING },
-                      right: { type: Type.STRING }
-                    }
-                  } 
+                  items: { type: Type.STRING },
+                  description: "4 possible answers to choose from"
                 }
-              }
+              },
+              required: ["options"]
             },
-            correctAnswer: { type: Type.STRING, description: "The correct value or order" }
+            correctAnswer: { type: Type.STRING, description: "The exact string from options" }
           },
           required: ["id", "type", "question", "data", "correctAnswer"]
         }
@@ -54,5 +47,9 @@ export const generateHomework = async (topic: string, description: string) => {
     }
   });
 
-  return JSON.parse(response.text);
+  const text = response.text;
+  if (!text) {
+    throw new Error("No response text received from Gemini API");
+  }
+  return JSON.parse(text.trim());
 };

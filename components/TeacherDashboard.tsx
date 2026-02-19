@@ -1,168 +1,187 @@
 
 import React, { useState } from 'react';
-import { Group, Lesson, Homework } from '../types';
-import { Plus, Users, ChevronRight, FileText, Sparkles, Send, Trash2, CheckCircle } from 'lucide-react';
+import { Group, Lesson, GlobalDB } from '../types';
+import { Plus, Users, ChevronRight, FileText, Sparkles, UserPlus, X, AtSign } from 'lucide-react';
 import { generateHomework } from '../services/geminiService';
 
 interface TeacherDashboardProps {
   groups: Group[];
-  onGroupSelect: (group: Group) => void;
+  onGroupSelect: () => void;
+  userNickname: string;
 }
 
-const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ groups, onGroupSelect }) => {
-  const [localGroups, setLocalGroups] = useState<Group[]>(groups);
+const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ groups, onGroupSelect, userNickname }) => {
   const [isCreatingLesson, setIsCreatingLesson] = useState(false);
+  const [isAddingStudent, setIsAddingStudent] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [newLessonTopic, setNewLessonTopic] = useState('');
-  const [newLessonDesc, setNewLessonDesc] = useState('');
+  const [newStudentNick, setNewStudentNick] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [activeTab, setActiveTab] = useState<'groups' | 'insights'>('groups');
+
+  const getDB = (): GlobalDB => {
+    try {
+      return JSON.parse(localStorage.getItem('ustozy_global_db') || '{"users":[],"groups":[]}');
+    } catch (e) {
+      return { users: [], groups: [] };
+    }
+  };
+  const saveDB = (db: GlobalDB) => localStorage.setItem('ustozy_global_db', JSON.stringify(db));
 
   const handleAddLesson = async () => {
     if (!selectedGroupId || !newLessonTopic) return;
-    
     setIsGenerating(true);
     try {
-      const generatedTasks = await generateHomework(newLessonTopic, newLessonDesc);
-      
+      const generatedTasks = await generateHomework(newLessonTopic, '');
+      const db = getDB();
       const newLesson: Lesson = {
         id: Math.random().toString(36).substr(2, 9),
         topic: newLessonTopic,
-        description: newLessonDesc,
+        description: '',
         files: [],
         createdAt: Date.now(),
-        homework: {
-          id: 'hw-' + Date.now(),
-          title: `Homework: ${newLessonTopic}`,
-          tasks: generatedTasks,
-          attempts: 0
-        }
+        homework: { id: 'hw-' + Date.now(), title: newLessonTopic, tasks: generatedTasks, attempts: 0 }
       };
-
-      setLocalGroups(prev => prev.map(g => 
-        g.id === selectedGroupId 
-          ? { ...g, lessons: [newLesson, ...g.lessons] } 
-          : g
-      ));
-
+      
+      const gIndex = db.groups.findIndex(g => g.id === selectedGroupId);
+      if (gIndex !== -1) {
+        db.groups[gIndex].lessons = db.groups[gIndex].lessons || [];
+        db.groups[gIndex].lessons.unshift(newLesson);
+        saveDB(db);
+        onGroupSelect();
+      }
       setIsCreatingLesson(false);
       setNewLessonTopic('');
-      setNewLessonDesc('');
-    } catch (error) {
-      alert("Failed to generate homework via AI. Using manual creation...");
-      // Fallback or error handling
-    } finally {
-      setIsGenerating(false);
+    } catch (e) { 
+      console.error(e);
+      alert("Generation failed."); 
+    }
+    finally { setIsGenerating(false); }
+  };
+
+  const handleAddStudent = () => {
+    const db = getDB();
+    const cleanNick = newStudentNick.replace('@', '').toLowerCase().trim();
+    const student = db.users.find(u => u.nickname === cleanNick);
+    
+    if (!student) {
+      alert("Student not found! Make sure they have onboarded.");
+      return;
+    }
+
+    const gIndex = db.groups.findIndex(g => g.id === selectedGroupId);
+    if (gIndex !== -1) {
+      db.groups[gIndex].studentNicknames = db.groups[gIndex].studentNicknames || [];
+      if (db.groups[gIndex].studentNicknames.includes(cleanNick)) {
+        alert("Student already in group.");
+        return;
+      }
+      db.groups[gIndex].studentNicknames.push(cleanNick);
+      saveDB(db);
+      onGroupSelect();
+      setIsAddingStudent(false);
+      setNewStudentNick('');
     }
   };
 
   return (
     <div className="p-5 space-y-6">
-      {/* Stats Cards */}
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
-          <p className="text-blue-600 text-xs font-semibold mb-1">TOTAL STUDENTS</p>
-          <h3 className="text-2xl font-bold text-blue-900">48</h3>
+          <p className="text-blue-600 text-[10px] font-bold uppercase tracking-widest">Total Groups</p>
+          <h3 className="text-2xl font-black text-blue-900">{groups?.length || 0}</h3>
         </div>
         <div className="bg-purple-50 p-4 rounded-2xl border border-purple-100">
-          <p className="text-purple-600 text-xs font-semibold mb-1">COMPLETED TASKS</p>
-          <h3 className="text-2xl font-bold text-purple-900">124</h3>
+          <p className="text-purple-600 text-[10px] font-bold uppercase tracking-widest">Students Reached</p>
+          <h3 className="text-2xl font-black text-purple-900">
+            {new Set(groups?.flatMap(g => g.studentNicknames || []) || []).size}
+          </h3>
         </div>
       </div>
 
-      <div className="flex justify-between items-center mb-2">
-        <h3 className="text-lg font-bold">My Groups</h3>
-        <button className="text-blue-600 text-sm font-semibold flex items-center gap-1">
-          <Plus className="w-4 h-4" /> New Group
-        </button>
-      </div>
+      <h3 className="text-lg font-black text-gray-900">Manage Classes</h3>
 
-      <div className="space-y-3">
-        {localGroups.map(group => (
-          <div key={group.id} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+      <div className="space-y-4">
+        {groups?.map(group => (
+          <div key={group.id} className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm">
             <div className="flex justify-between items-start mb-4">
               <div>
-                <h4 className="font-bold text-gray-900">{group.name}</h4>
-                <div className="flex items-center gap-2 mt-1">
-                  <Users className="w-3 h-3 text-gray-400" />
-                  <span className="text-xs text-gray-500">{group.studentsCount} students</span>
-                </div>
+                <h4 className="font-bold text-gray-900 text-lg">{group.name}</h4>
+                <p className="text-xs text-gray-400 font-medium">{group.studentNicknames?.length || 0} students enrolled</p>
               </div>
-              <button 
-                onClick={() => { setSelectedGroupId(group.id); setIsCreatingLesson(true); }}
-                className="bg-blue-50 text-blue-600 p-2 rounded-xl hover:bg-blue-100 transition-colors"
-              >
-                <Plus className="w-5 h-5" />
-              </button>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => { setSelectedGroupId(group.id); setIsAddingStudent(true); }}
+                  className="bg-gray-100 p-2 rounded-xl text-gray-600"
+                >
+                  <UserPlus className="w-4 h-4" />
+                </button>
+                <button 
+                  onClick={() => { setSelectedGroupId(group.id); setIsCreatingLesson(true); }}
+                  className="bg-blue-600 text-white p-2 rounded-xl shadow-lg shadow-blue-100"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             <div className="space-y-2">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Recent Lessons</p>
-              {group.lessons.length > 0 ? (
-                group.lessons.map(lesson => (
-                  <div key={lesson.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                        <FileText className="w-4 h-4 text-blue-600" />
-                      </div>
-                      <p className="text-sm font-medium text-gray-700">{lesson.topic}</p>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-gray-400" />
+              {group.lessons?.map(lesson => (
+                <div key={lesson.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <FileText className="w-4 h-4 text-blue-500" />
+                    <span className="text-sm font-bold text-gray-700">{lesson.topic}</span>
                   </div>
-                ))
-              ) : (
-                <p className="text-sm text-gray-400 italic">No lessons yet</p>
-              )}
+                  <ChevronRight className="w-4 h-4 text-gray-300" />
+                </div>
+              ))}
+              {(group.lessons?.length || 0) === 0 && <p className="text-center text-xs text-gray-300 py-2">No lessons yet.</p>}
             </div>
           </div>
         ))}
       </div>
 
+      {/* Add Student Modal */}
+      {isAddingStudent && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-6">
+          <div className="bg-white w-full rounded-[2rem] p-6 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center">
+              <h4 className="text-xl font-black">Add Student</h4>
+              <button onClick={() => setIsAddingStudent(false)}><X className="text-gray-400" /></button>
+            </div>
+            <div className="relative">
+              <AtSign className="absolute left-4 top-4 text-gray-400 w-5 h-5" />
+              <input 
+                type="text" placeholder="student_nickname"
+                className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-blue-500"
+                value={newStudentNick}
+                onChange={e => setNewStudentNick(e.target.value)}
+              />
+            </div>
+            <button onClick={handleAddStudent} className="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl">Add to Group</button>
+          </div>
+        </div>
+      )}
+
       {/* Create Lesson Modal */}
       {isCreatingLesson && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-6 z-[100] animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-6">
+          <div className="bg-white w-full rounded-[2rem] p-6 shadow-2xl space-y-4">
             <div className="flex justify-between items-center">
-              <h4 className="text-xl font-bold">New Lesson</h4>
-              <button onClick={() => setIsCreatingLesson(false)} className="text-gray-400">✕</button>
+              <h4 className="text-xl font-black">Generate Lesson</h4>
+              <button onClick={() => setIsCreatingLesson(false)}><X className="text-gray-400" /></button>
             </div>
-            
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-bold text-gray-500 block mb-1">TOPIC</label>
-                <input 
-                  value={newLessonTopic}
-                  onChange={e => setNewLessonTopic(e.target.value)}
-                  placeholder="e.g. Present Continuous" 
-                  className="w-full bg-gray-50 border-none rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-500 block mb-1">DESCRIPTION (OPTIONAL)</label>
-                <textarea 
-                  value={newLessonDesc}
-                  onChange={e => setNewLessonDesc(e.target.value)}
-                  placeholder="Focus on the 'ing' forms and common mistakes." 
-                  rows={3}
-                  className="w-full bg-gray-50 border-none rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
-                />
-              </div>
-              <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center cursor-pointer hover:border-blue-400 transition-colors">
-                <Plus className="w-6 h-6 text-gray-400 mx-auto mb-1" />
-                <p className="text-xs text-gray-500 font-medium">Upload materials (PDF, JPG)</p>
-              </div>
-            </div>
-
+            <input 
+              type="text" placeholder="e.g. Present Continuous"
+              className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl py-4 px-4 outline-none focus:border-blue-500"
+              value={newLessonTopic}
+              onChange={e => setNewLessonTopic(e.target.value)}
+            />
             <button 
-              disabled={isGenerating || !newLessonTopic}
-              onClick={handleAddLesson}
-              className={`w-full py-4 rounded-2xl flex items-center justify-center gap-2 font-bold text-white transition-all shadow-lg shadow-blue-200/50 ${isGenerating ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'}`}
+              disabled={isGenerating}
+              onClick={handleAddLesson} 
+              className={`w-full py-4 rounded-2xl font-bold text-white flex items-center justify-center gap-2 ${isGenerating ? 'bg-gray-400' : 'bg-blue-600 shadow-xl shadow-blue-100'}`}
             >
-              {isGenerating ? (
-                <>Generating AI Homework...</>
-              ) : (
-                <><Sparkles className="w-5 h-5" /> Create with AI Homework</>
-              )}
+              <Sparkles className="w-5 h-5" /> {isGenerating ? 'Generating HW...' : 'Create with AI HW'}
             </button>
           </div>
         </div>

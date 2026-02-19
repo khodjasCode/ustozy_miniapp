@@ -19,12 +19,14 @@ const HomeworkGame: React.FC<HomeworkGameProps> = ({ homework, onBack }) => {
   const currentTask = tasks[currentTaskIndex];
 
   useEffect(() => {
-    // Shuffle tasks on start
-    setTasks([...homework.tasks].sort(() => Math.random() - 0.5));
-  }, [homework.tasks]);
+    if (homework?.tasks) {
+      setTasks([...homework.tasks].sort(() => Math.random() - 0.5));
+    }
+  }, [homework?.tasks]);
 
   const handleCheck = () => {
-    const isCorrect = userAnswer === currentTask.correctAnswer;
+    if (!currentTask) return;
+    const isCorrect = String(userAnswer).toLowerCase().trim() === String(currentTask.correctAnswer).toLowerCase().trim();
     setLastAnswerCorrect(isCorrect);
     if (isCorrect) setScore(s => s + 1);
     setGameState('feedback');
@@ -47,7 +49,14 @@ const HomeworkGame: React.FC<HomeworkGameProps> = ({ homework, onBack }) => {
     setTasks([...tasks].sort(() => Math.random() - 0.5));
   };
 
-  if (tasks.length === 0) return null;
+  if (!tasks || tasks.length === 0) {
+    return (
+      <div className="fixed inset-0 bg-white z-[200] flex flex-col items-center justify-center p-8">
+        <p className="text-gray-400">Loading tasks...</p>
+        <button onClick={onBack} className="mt-4 px-6 py-2 bg-gray-100 rounded-xl">Go Back</button>
+      </div>
+    );
+  }
 
   if (gameState === 'finished') {
     return (
@@ -55,8 +64,8 @@ const HomeworkGame: React.FC<HomeworkGameProps> = ({ homework, onBack }) => {
         <div className="w-32 h-32 bg-yellow-100 rounded-full flex items-center justify-center mb-8 animate-bounce">
           <Trophy className="w-16 h-16 text-yellow-500" />
         </div>
-        <h2 className="text-3xl font-bold mb-2">Well Done!</h2>
-        <p className="text-gray-500 mb-8">You finished "{homework.title}" with a great score!</p>
+        <h2 className="text-3xl font-bold mb-2">Great Job!</h2>
+        <p className="text-gray-500 mb-8">You finished "{homework.title}"</p>
         
         <div className="grid grid-cols-2 gap-4 w-full max-w-xs mb-10">
           <div className="bg-gray-50 p-4 rounded-2xl border">
@@ -64,39 +73,35 @@ const HomeworkGame: React.FC<HomeworkGameProps> = ({ homework, onBack }) => {
             <p className="text-2xl font-black text-gray-800">{score}/{tasks.length}</p>
           </div>
           <div className="bg-gray-50 p-4 rounded-2xl border">
-            <p className="text-[10px] font-bold text-gray-400 uppercase">XP EARNED</p>
+            <p className="text-[10px] font-bold text-gray-400 uppercase">XP</p>
             <p className="text-2xl font-black text-blue-600">+{score * 20}</p>
           </div>
         </div>
 
-        <div className="space-y-3 w-full max-w-xs">
-          <button 
-            onClick={onBack}
-            className="w-full py-4 bg-blue-600 text-white font-bold rounded-2xl shadow-xl shadow-blue-200"
-          >
-            Back to Dashboard
-          </button>
-          <button 
-            onClick={restart}
-            className="w-full py-4 bg-gray-100 text-gray-600 font-bold rounded-2xl flex items-center justify-center gap-2"
-          >
-            <RefreshCw className="w-4 h-4" /> Try Again
-          </button>
-        </div>
+        <button onClick={onBack} className="w-full max-w-xs py-4 bg-blue-600 text-white font-bold rounded-2xl shadow-xl">
+          Continue
+        </button>
       </div>
     );
   }
 
+  if (!currentTask) return null;
+
+  // Попытка найти пропуск в тексте (поддержка разных форматов)
+  const taskText = currentTask.data?.text || '';
+  const parts = taskText.split(/\[___\]|___| _ /g);
+  const options = currentTask.data?.options || [];
+
   return (
-    <div className="fixed inset-0 bg-gray-50 z-[200] flex flex-col max-w-md mx-auto">
-      {/* Game Header */}
-      <div className="p-5 flex items-center justify-between bg-white border-b">
+    <div className="fixed inset-0 bg-white z-[200] flex flex-col max-w-md mx-auto">
+      {/* Header */}
+      <div className="p-5 flex items-center justify-between border-b">
         <button onClick={onBack} className="p-2 -ml-2 text-gray-400"><X /></button>
         <div className="flex-1 px-6">
           <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
             <div 
-              className="h-full bg-blue-500 transition-all duration-300" 
-              style={{ width: `${((currentTaskIndex) / tasks.length) * 100}%` }}
+              className="h-full bg-blue-500 transition-all" 
+              style={{ width: `${((currentTaskIndex + 1) / tasks.length) * 100}%` }}
             ></div>
           </div>
         </div>
@@ -106,103 +111,91 @@ const HomeworkGame: React.FC<HomeworkGameProps> = ({ homework, onBack }) => {
         </div>
       </div>
 
-      {/* Task Content */}
-      <div className="flex-1 p-6 flex flex-col justify-center">
-        <div className="mb-10 text-center">
-          <p className="text-blue-600 font-bold text-sm uppercase tracking-widest mb-2">{currentTask.type.replace('-', ' ')}</p>
-          <h2 className="text-2xl font-bold text-gray-900">{currentTask.question}</h2>
+      <div className="flex-1 p-6 flex flex-col">
+        <div className="mt-8 mb-12 text-center">
+          <p className="text-blue-600 font-bold text-xs uppercase tracking-widest mb-3">
+            {currentTask.type.replace('-', ' ')}
+          </p>
+          <h2 className="text-2xl font-black text-gray-900 leading-tight">
+            {currentTask.question}
+          </h2>
         </div>
 
-        {/* Task UI specific to type */}
-        <div className="flex-1">
-          {currentTask.type === 'fill-blanks' && (
-            <div className="space-y-8">
-              <p className="text-xl text-center leading-loose">
-                {currentTask.data.text.split('[___]').map((part: string, idx: number, arr: any) => (
+        <div className="flex-1 flex flex-col justify-center">
+          {currentTask.type === 'fill-blanks' ? (
+            <div className="space-y-12">
+              <p className="text-2xl text-center leading-relaxed font-medium text-gray-700">
+                {parts.map((part, idx) => (
                   <React.Fragment key={idx}>
                     {part}
-                    {idx < arr.length - 1 && (
-                      <span className="inline-block px-3 py-1 bg-white border-b-2 border-blue-500 min-w-[80px] text-center mx-1 rounded-md text-blue-600 font-bold">
-                        {userAnswer || '?'}
+                    {idx < parts.length - 1 && (
+                      <span className="inline-block px-4 py-1 mx-2 bg-blue-50 border-b-4 border-blue-500 min-w-[100px] text-center rounded-lg text-blue-600 font-black transition-all">
+                        {userAnswer || '...'}
                       </span>
                     )}
                   </React.Fragment>
                 ))}
               </p>
-              <div className="grid grid-cols-2 gap-3">
-                {currentTask.data.options.map((opt: string) => (
-                  <button 
-                    key={opt}
-                    onClick={() => setUserAnswer(opt)}
-                    className={`p-4 rounded-2xl border-2 font-bold transition-all ${userAnswer === opt ? 'bg-blue-50 border-blue-500 text-blue-600' : 'bg-white border-gray-100 text-gray-600 shadow-sm'}`}
-                  >
-                    {opt}
-                  </button>
-                ))}
-              </div>
             </div>
-          )}
-
-          {currentTask.type === 'multiple-choice' && (
-             <div className="space-y-3">
-               {currentTask.data.options.map((opt: string) => (
-                  <button 
-                    key={opt}
-                    onClick={() => setUserAnswer(opt)}
-                    className={`w-full p-4 rounded-2xl border-2 text-left font-bold transition-all flex items-center justify-between ${userAnswer === opt ? 'bg-blue-50 border-blue-500 text-blue-600' : 'bg-white border-gray-100 text-gray-600 shadow-sm'}`}
-                  >
-                    {opt}
-                    {userAnswer === opt && <CheckCircle className="w-5 h-5" />}
-                  </button>
-                ))}
+          ) : (
+             <div className="mb-8">
+                {/* For multiple-choice, we just use the options grid below */}
              </div>
           )}
 
-          {/* Fallback for complex types in this prototype */}
-          {(currentTask.type === 'word-order' || currentTask.type === 'matching') && (
-            <div className="text-center py-10 bg-white border rounded-3xl p-6">
-              <p className="text-gray-400 italic mb-4">Task type: {currentTask.type} logic integrated in production.</p>
+          {/* Options Grid */}
+          <div className="grid grid-cols-2 gap-4 mt-8">
+            {options.map((opt: string) => (
               <button 
-                onClick={() => setUserAnswer(currentTask.correctAnswer)}
-                className="bg-blue-100 text-blue-600 px-6 py-3 rounded-2xl font-bold"
+                key={opt}
+                onClick={() => setUserAnswer(opt)}
+                className={`p-5 rounded-3xl border-2 font-bold text-lg transition-all ${
+                  userAnswer === opt 
+                    ? 'bg-blue-600 border-blue-600 text-white scale-[1.02] shadow-xl shadow-blue-100' 
+                    : 'bg-white border-gray-100 text-gray-600 hover:border-blue-200'
+                }`}
               >
-                Auto-fill Answer (Demo)
+                {opt}
               </button>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Action Bar */}
+      {/* Footer */}
       <div className={`p-6 border-t ${gameState === 'feedback' ? (lastAnswerCorrect ? 'bg-green-50' : 'bg-red-50') : 'bg-white'}`}>
         {gameState === 'playing' ? (
           <button 
             disabled={!userAnswer}
             onClick={handleCheck}
-            className={`w-full py-5 rounded-2xl font-bold text-lg shadow-xl transition-all ${userAnswer ? 'bg-blue-600 text-white shadow-blue-200' : 'bg-gray-200 text-gray-400 shadow-none'}`}
+            className={`w-full py-5 rounded-2xl font-black text-xl shadow-xl transition-all ${
+              userAnswer ? 'bg-blue-600 text-white shadow-blue-100' : 'bg-gray-100 text-gray-400 shadow-none'
+            }`}
           >
             Check Answer
           </button>
         ) : (
           <div className="animate-in slide-in-from-bottom-5 duration-300">
-            <div className="flex items-center gap-4 mb-5">
-              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${lastAnswerCorrect ? 'bg-green-500' : 'bg-red-500'}`}>
-                {lastAnswerCorrect ? <CheckCircle className="text-white" /> : <X className="text-white" />}
+            <div className="flex items-center gap-4 mb-6">
+              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${lastAnswerCorrect ? 'bg-green-500' : 'bg-red-500'}`}>
+                {lastAnswerCorrect ? <CheckCircle className="text-white w-8 h-8" /> : <X className="text-white w-8 h-8" />}
               </div>
-              <div>
-                <h4 className={`text-xl font-bold ${lastAnswerCorrect ? 'text-green-800' : 'text-red-800'}`}>
-                  {lastAnswerCorrect ? 'Excellent!' : 'Correct answer: ' + currentTask.correctAnswer}
+              <div className="flex-1">
+                <h4 className={`text-xl font-black ${lastAnswerCorrect ? 'text-green-800' : 'text-red-800'}`}>
+                  {lastAnswerCorrect ? 'Awesome!' : 'Not quite right'}
                 </h4>
-                <p className={`text-sm ${lastAnswerCorrect ? 'text-green-600' : 'text-red-600'}`}>
-                  {lastAnswerCorrect ? 'You earned +20 XP' : 'Keep practicing, you got this!'}
-                </p>
+                {!lastAnswerCorrect && (
+                  <p className="text-red-600 font-bold">Answer: {currentTask.correctAnswer}</p>
+                )}
               </div>
             </div>
             <button 
               onClick={nextTask}
-              className={`w-full py-5 rounded-2xl font-bold text-lg text-white shadow-xl flex items-center justify-center gap-2 ${lastAnswerCorrect ? 'bg-green-600 shadow-green-100' : 'bg-red-600 shadow-red-100'}`}
+              className={`w-full py-5 rounded-2xl font-black text-xl text-white shadow-xl flex items-center justify-center gap-3 ${
+                lastAnswerCorrect ? 'bg-green-600 shadow-green-100' : 'bg-red-600 shadow-red-100'
+              }`}
             >
-              Continue <ArrowRight className="w-5 h-5" />
+              Next <ArrowRight className="w-6 h-6" />
             </button>
           </div>
         )}

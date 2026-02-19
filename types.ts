@@ -10,7 +10,7 @@ export interface Task {
   id: string;
   type: TaskType;
   question: string;
-  data: any; // Context specific to type
+  data: any;
   correctAnswer: any;
 }
 
@@ -34,15 +34,21 @@ export interface Lesson {
 export interface Group {
   id: string;
   name: string;
-  studentsCount: number;
+  teacherNickname: string;
+  studentNicknames: string[];
   lessons: Lesson[];
 }
 
 export interface UserState {
   role: UserRole;
   username: string;
-  name?: string;
-  phone?: string;
+  nickname: string;
+  name: string;
+  phone: string;
   onboarded: boolean;
+}
+
+export interface GlobalDB {
+  users: UserState[];
   groups: Group[];
 }
